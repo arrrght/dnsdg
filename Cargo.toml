@@ -1,0 +1,6 @@
+[package]
+name = "dnsdg"
+version = "0.1.0"
+authors = ["arrrght <arrrght@gmail.com>"]
+
+[dependencies]
