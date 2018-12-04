@@ -21,7 +21,6 @@ impl<'a> std::fmt::Debug for SomeError<'a> {
 }
 #[derive(Debug, Copy, Clone)]
 struct Opt<'a> {
-    a: &'a str,
     quiet: bool,
     hostname: &'a str,
     server: &'a str,
@@ -31,7 +30,6 @@ struct Opt<'a> {
 impl<'a> Default for Opt<'a> {
     fn default() -> Opt<'a> {
         Opt {
-            a: "String1",
             quiet: false,
             hostname: "google.com",
             server: "8.8.8.8",
@@ -39,11 +37,25 @@ impl<'a> Default for Opt<'a> {
         }
     }
 }
-
-pub fn dnsping(args: &Vec<String>) {
+fn get_prm(args: &Vec<String>) -> Opt {
     let prm = Opt {
         ..Default::default()
     };
+    println!("raw: {:?}", args);
+    for key in vec!["quiet", "hostname", "server", "count"] {
+        for i in (0..args.len()) {
+            if key == args[i] {
+                prm[key] = args[i+1];
+            }
+            //println!("prm: {}", args[i]);
+        }
+    }
+    std::process::exit(1);
+
+    prm
+}
+pub fn dnsping(args: &Vec<String>) {
+    let prm = get_prm(args);
     println!("prm: {:?}", prm);
     println!("args: {:?}", args);
 
