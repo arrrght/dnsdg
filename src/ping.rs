@@ -6,7 +6,6 @@ use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::time::Instant;
 
 enum SomeError<'a> {
-    Conv(std::string::String),
     Io(std::io::Error),
     DnsParser(dns_parser::Error),
     Other(&'a str),
@@ -14,19 +13,19 @@ enum SomeError<'a> {
 impl<'a> std::fmt::Debug for SomeError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            SomeError::Conv(ref err) => write!(f, "Err: {}", err),
             SomeError::Io(ref err) => write!(f, "Err: {}", err),
             SomeError::DnsParser(ref err) => write!(f, "Err: {}", err),
             SomeError::Other(ref err) => write!(f, "Err: {}", err),
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct Opt<'a> {
     a: &'a str,
     quiet: bool,
     hostname: &'a str,
     server: &'a str,
+    count: u32,
 }
 
 impl<'a> Default for Opt<'a> {
@@ -36,6 +35,7 @@ impl<'a> Default for Opt<'a> {
             quiet: false,
             hostname: "google.com",
             server: "8.8.8.8",
+            count: 10,
         }
     }
 }
@@ -47,13 +47,24 @@ pub fn dnsping(args: &Vec<String>) {
     println!("prm: {:?}", prm);
     println!("args: {:?}", args);
 
-    match do_it(prm) {
-        Ok(o) => println!("OK: {:?}", o),
-        Err(e) => {
-            println!("Err: {:?}", e);
-            std::process::exit(1);
-        }
-    }
+    let mut results: Vec<u32> = (0..prm.count)
+        .map(|_| match do_it(prm) {
+            Ok(o) => {
+                print!("{} ", o);
+                o
+            }
+            Err(e) => {
+                println!("Err: {:?}", e);
+                std::process::exit(1);
+            }
+        }).collect();
+    println!("\nresults: {:?}", results);
+    results.sort();
+    let max = results.last().unwrap();
+    let min = results.first().unwrap();
+    let sum: u32 = results.iter().sum();
+    let aver: f32 = sum as f32 / results.len() as f32;
+    println!("min: {}, max: {}, avg: {}", min, max, aver);
 }
 
 fn prs2(name: &str) -> Result<SocketAddr, SomeError> {
@@ -80,7 +91,7 @@ fn do_it(prm: Opt) -> Result<u32, SomeError> {
     }).map_err(SomeError::Io)?;
     sock.connect(server_sa).map_err(SomeError::Io)?;
 
-    let now = Instant::now();
+    let time_now = Instant::now();
     let mut builder = Builder::new_query(1, true);
     builder.add_question(&prm.hostname, false, QueryType::A, QueryClass::IN);
     let packet = builder.build().unwrap_or_else(|x| x);
@@ -96,5 +107,5 @@ fn do_it(prm: Opt) -> Result<u32, SomeError> {
         return Err(SomeError::Other("Something bad happening"));
     }
 
-    Ok(now.elapsed().subsec_millis())
+    Ok(time_now.elapsed().subsec_millis())
 }
