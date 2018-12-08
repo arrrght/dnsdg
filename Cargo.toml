@@ -5,3 +5,4 @@ authors = ["arrrght <arrrght@gmail.com>"]
 
 [dependencies]
 dns-parser = "0.8.0"
+clap = "2.32.0"
