@@ -27,13 +27,21 @@ fn main() {
                         .value_name("server")
                         .default_value("8.8.8.8"),
                 ).arg(
+                    Arg::with_name("port")
+                        .help("DNS server port number")
+                        .short("p")
+                        .long("port")
+                        .takes_value(true)
+                        .value_name("port")
+                        .default_value("53"),
+                ).arg(
                     Arg::with_name("interval")
-                        .help("Time between each request, in seconds")
+                        .help("Time between each request, in milliseconds")
                         .short("i")
                         .long("interval")
                         .takes_value(true)
                         .value_name("interval")
-                        .default_value("1"),
+                        .default_value("1000"),
                 ).arg(
                     Arg::with_name("count")
                         .help("Count times")
@@ -52,16 +60,10 @@ fn main() {
             ),
         );
     let matches = app.get_matches();
-    //println!("found: {:?}", matches);
 
     if let ("ping", Some(cmd)) = matches.subcommand() {
         ping::dnsping(&cmd);
     }else{
         println!("run as dnsdg ping");
     }
-}
-
-fn _print_usage(err: &str) {
-    println!("Err: {}", err);
-    println!("Usage: bla-bla-bla");
 }

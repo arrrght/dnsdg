@@ -27,7 +27,8 @@ struct Opt<'a> {
     hostname: &'a str,
     server: &'a str,
     count: u32,
-    interval: u64
+    interval: u64,
+    port: u32,
 }
 
 pub fn dnsping(args: &ArgMatches) {
@@ -36,20 +37,21 @@ pub fn dnsping(args: &ArgMatches) {
         hostname: &value_t!(args, "hostname", String).unwrap(),
         count: value_t!(args, "count", u32).unwrap(),
         interval: value_t!(args, "interval", u64).unwrap(),
+        port: value_t!(args, "port", u32).unwrap(),
     };
 
     let mut results: Vec<u32> = (0..prm.count)
         .map(|c| match do_it(prm) {
-            Ok(o) => {
+            Ok((time, len)) => {
                 println!(
                     "{} bytes from {}: seq={:<3} time={:.3} ms ",
-                    o.len,
+                    len,
                     prm.server,
                     c,
-                    o.time as f32 / 1000.0
+                    time as f32 / 1000.0
                 );
-                std::thread::sleep(std::time::Duration::from_secs(prm.interval));
-                o.time
+                std::thread::sleep(std::time::Duration::from_millis(prm.interval));
+                time
             }
             Err(e) => {
                 println!("Err: {:?}", e);
@@ -65,14 +67,14 @@ pub fn dnsping(args: &ArgMatches) {
     println!("min: {}, max: {}, avg: {}", min, max, aver);
 }
 
-fn prs2(name: &str) -> Result<SocketAddr, SomeError> {
+fn prs2(name: &str, port: u32) -> Result<SocketAddr, SomeError> {
     match name.to_socket_addrs() {
-        Err(_) => match format!("{}:53", name).to_socket_addrs() {
+        Err(_) => match format!("{}:{}", name, port).to_socket_addrs() {
             Err(e) => Err(SomeError::Io(e)),
             Ok(o) => o
                 .clone()
                 .next()
-                .ok_or_else(|| SomeError::Other("SockAddr.error")),
+                .ok_or_else(|| SomeError::Other("SockAddr+port.error")),
         },
         Ok(o) => o
             .clone()
@@ -80,13 +82,9 @@ fn prs2(name: &str) -> Result<SocketAddr, SomeError> {
             .ok_or_else(|| SomeError::Other("SockAddr.error")),
     }
 }
-#[derive(Debug)]
-struct Ans {
-    time: u32,
-    len: usize,
-}
-fn do_it(prm: Opt) -> Result<Ans, SomeError> {
-    let server_sa = prs2(prm.server)?;
+
+fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
+    let server_sa = prs2(prm.server, prm.port)?;
     let sock = (match server_sa.is_ipv6() {
         true => UdpSocket::bind("[::]:0"),
         _ => UdpSocket::bind("0.0.0.0:0"),
@@ -111,8 +109,5 @@ fn do_it(prm: Opt) -> Result<Ans, SomeError> {
         return Err(SomeError::Other("Something bad happening"));
     }
 
-    Ok(Ans {
-        time: time_now.elapsed().subsec_micros(),
-        len: recv_len,
-    })
+    Ok((time_now.elapsed().subsec_micros(), recv_len))
 }
