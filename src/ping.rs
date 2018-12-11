@@ -4,7 +4,6 @@ extern crate dns_parser;
 use clap::{value_t, ArgMatches};
 use dns_parser::{Builder, Packet, ResponseCode};
 use dns_parser::{Class, QueryClass, QueryType, RData};
-use std::net::Ipv4Addr;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::time::Instant;
 
@@ -44,6 +43,7 @@ fn parse_qtype(v: &str) -> QueryType {
         "SOA" => QueryType::SOA,
         "SRV" => QueryType::SRV,
         "TXT" => QueryType::TXT,
+        "All" => QueryType::All,
         _ => {
             println!("Error: wrong/not implemented qtype");
             std::process::exit(1);
@@ -82,8 +82,7 @@ pub fn dnsping(args: &ArgMatches) {
                 println!("Err: {:?}", e);
                 std::process::exit(1);
             }
-        })
-        .collect();
+        }).collect();
     println!("\nresults: {:?}", results);
     results.sort();
     let max = results.last().unwrap();
@@ -114,8 +113,7 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
     let sock = (match server_sa.is_ipv6() {
         true => UdpSocket::bind("[::]:0"),
         _ => UdpSocket::bind("0.0.0.0:0"),
-    })
-    .map_err(SomeError::Io)?;
+    }).map_err(SomeError::Io)?;
     sock.set_read_timeout(Some(std::time::Duration::new(2, 0)))
         .map_err(SomeError::Io)?;
     sock.connect(server_sa).map_err(SomeError::Io)?;
@@ -136,6 +134,7 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
         return Err(SomeError::Other("Something bad happening"));
     }
     if prm.verbose {
+        println!("got {} answers:", pkt.answers.len());
         for a in pkt.answers {
             println!(
                 "{} {} {} {}",
@@ -152,13 +151,25 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
                     RData::AAAA(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
                     RData::CNAME(dns_parser::rdata::cname::Record(d)) => format!("CNAME {}", d),
                     #[cfg_attr(rustfmt, rustfmt::skip)]
-                    RData::MX(dns_parser::rdata::mx::Record{preference, exchange}) => format!("MX {} {}", preference, exchange),
-                    RData::NS(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
-                    RData::PTR(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
-                    RData::SOA(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
-                    RData::SRV(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
-                    RData::TXT(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
-                    _ => "Unknown".to_string(),
+                    RData::MX(dns_parser::rdata::mx::Record{preference, exchange})
+                        => format!("MX {} {}", preference, exchange),
+                    RData::NS(dns_parser::rdata::ns::Record(d)) => format!("NS {}", d),
+                    RData::PTR(dns_parser::rdata::ptr::Record(d)) => format!("PTR {}", d),
+                    #[cfg_attr(rustfmt, rustfmt::skip)]
+                    RData::SOA(dns_parser::rdata::soa::Record {
+                        primary_ns, mailbox, serial, refresh, retry, expire, minimum_ttl }) 
+                        => format!( "SOA {} {} {} {} {} {} {}",
+                        primary_ns, mailbox, serial, refresh, retry, expire, minimum_ttl
+                    ),
+                    #[cfg_attr(rustfmt, rustfmt::skip)]
+                    RData::SRV(dns_parser::rdata::srv::Record{priority, weight, port, target})
+                        => format!("SRV {} {} {} {}", priority, weight, port, target),
+                    #[cfg_attr(rustfmt, rustfmt::skip)]
+                    RData::TXT(ref txt) => {
+                        let s = txt.iter().map(|x| std::str::from_utf8(x).unwrap()).collect::<Vec<_>>().concat();
+                        format!("TXT {}", s)
+                    }
+                    RData::Unknown(d) => format!("Unknown {:?}", &d),
                 }
             );
         }
