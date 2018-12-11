@@ -3,7 +3,8 @@ extern crate dns_parser;
 
 use clap::{value_t, ArgMatches};
 use dns_parser::{Builder, Packet, ResponseCode};
-use dns_parser::{QueryClass, QueryType};
+use dns_parser::{Class, QueryClass, QueryType, RData};
+use std::net::Ipv4Addr;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::time::Instant;
 
@@ -29,8 +30,26 @@ struct Opt<'a> {
     count: u32,
     interval: u64,
     port: u32,
+    query_type: QueryType,
+    verbose: bool,
 }
-
+fn parse_qtype(v: &str) -> QueryType {
+    match v {
+        "A" => QueryType::A,
+        "AAAA" => QueryType::AAAA,
+        "CNAME" => QueryType::CNAME,
+        "MX" => QueryType::MX,
+        "NS" => QueryType::NS,
+        "PTR" => QueryType::PTR,
+        "SOA" => QueryType::SOA,
+        "SRV" => QueryType::SRV,
+        "TXT" => QueryType::TXT,
+        _ => {
+            println!("Error: wrong/not implemented qtype");
+            std::process::exit(1);
+        }
+    }
+}
 pub fn dnsping(args: &ArgMatches) {
     let prm = Opt {
         server: &value_t!(args, "server", String).unwrap(),
@@ -38,8 +57,14 @@ pub fn dnsping(args: &ArgMatches) {
         count: value_t!(args, "count", u32).unwrap(),
         interval: value_t!(args, "interval", u64).unwrap(),
         port: value_t!(args, "port", u32).unwrap(),
+        query_type: parse_qtype(&value_t!(args, "qtype", String).unwrap()),
+        verbose: args.is_present("verbose"),
     };
 
+    println!(
+        "dnsdg ping server: {}, hostname: {}",
+        prm.server, prm.hostname
+    );
     let mut results: Vec<u32> = (0..prm.count)
         .map(|c| match do_it(prm) {
             Ok((time, len)) => {
@@ -57,7 +82,8 @@ pub fn dnsping(args: &ArgMatches) {
                 println!("Err: {:?}", e);
                 std::process::exit(1);
             }
-        }).collect();
+        })
+        .collect();
     println!("\nresults: {:?}", results);
     results.sort();
     let max = results.last().unwrap();
@@ -88,14 +114,15 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
     let sock = (match server_sa.is_ipv6() {
         true => UdpSocket::bind("[::]:0"),
         _ => UdpSocket::bind("0.0.0.0:0"),
-    }).map_err(SomeError::Io)?;
+    })
+    .map_err(SomeError::Io)?;
     sock.set_read_timeout(Some(std::time::Duration::new(2, 0)))
         .map_err(SomeError::Io)?;
     sock.connect(server_sa).map_err(SomeError::Io)?;
 
     let time_now = Instant::now();
     let mut builder = Builder::new_query(1, true);
-    builder.add_question(&prm.hostname, false, QueryType::A, QueryClass::IN);
+    builder.add_question(&prm.hostname, false, prm.query_type, QueryClass::IN);
     let packet = builder.build().unwrap_or_else(|x| x);
 
     sock.send(&packet).map_err(SomeError::Io)?;
@@ -107,6 +134,34 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
         && pkt.header.response_code != ResponseCode::NameError
     {
         return Err(SomeError::Other("Something bad happening"));
+    }
+    if prm.verbose {
+        for a in pkt.answers {
+            println!(
+                "{} {} {} {}",
+                a.name,
+                a.ttl,
+                match a.cls {
+                    Class::IN => "IN",
+                    Class::CS => "CS",
+                    Class::CH => "CH",
+                    Class::HS => "HS",
+                },
+                match a.data {
+                    RData::A(dns_parser::rdata::a::Record(d)) => format!("A {}", d),
+                    RData::AAAA(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
+                    RData::CNAME(dns_parser::rdata::cname::Record(d)) => format!("CNAME {}", d),
+                    #[cfg_attr(rustfmt, rustfmt::skip)]
+                    RData::MX(dns_parser::rdata::mx::Record{preference, exchange}) => format!("MX {} {}", preference, exchange),
+                    RData::NS(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
+                    RData::PTR(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
+                    RData::SOA(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
+                    RData::SRV(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
+                    RData::TXT(dns_parser::rdata::aaaa::Record(d)) => format!("AAAA {}", d),
+                    _ => "Unknown".to_string(),
+                }
+            );
+        }
     }
 
     Ok((time_now.elapsed().subsec_micros(), recv_len))

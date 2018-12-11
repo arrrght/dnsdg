@@ -19,6 +19,19 @@ fn main() {
                         .value_name("hostname")
                         .default_value("google.com"),
                 ).arg(
+                    Arg::with_name("verbose")
+                        .help("Print actual server response")
+                        .short("v")
+                        .long("verbose")
+                ).arg(
+                    Arg::with_name("qtype")
+                        .help("DNS request record type")
+                        .short("t")
+                        .long("qtype")
+                        .takes_value(true)
+                        .value_name("qtype")
+                        .default_value("A"),
+                ).arg(
                     Arg::with_name("server")
                         .help("DNS Server")
                         .short("d")
