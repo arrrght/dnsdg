@@ -65,7 +65,7 @@ pub fn dnsping(args: &ArgMatches) {
         "dnsdg ping server: {}, hostname: {}",
         prm.server, prm.hostname
     );
-    let mut results: Vec<u32> = (0..prm.count)
+    let results: Vec<u32> = (0..prm.count)
         .map(|c| match do_it(prm) {
             Ok((time, len)) => {
                 println!(
@@ -83,13 +83,12 @@ pub fn dnsping(args: &ArgMatches) {
                 std::process::exit(1);
             }
         }).collect();
-    println!("\nresults: {:?}", results);
-    results.sort();
-    let max = results.last().unwrap();
-    let min = results.first().unwrap();
+    //println!("\nresults: {:?}", results);
+    let max  = results.iter().max().unwrap().clone() as f32;
+    let min = results.iter().min().unwrap().clone() as f32;
     let sum: u32 = results.iter().sum();
     let aver: f32 = sum as f32 / results.len() as f32;
-    println!("min: {}, max: {}, avg: {}", min, max, aver);
+    println!("min={} ms, max={} ms, avg={} ms", min/1000.0, max/1000.0, aver/1000.0);
 }
 
 fn prs2(name: &str, port: u32) -> Result<SocketAddr, SomeError> {
@@ -137,7 +136,7 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
         println!("got {} answers:", pkt.answers.len());
         for a in pkt.answers {
             println!(
-                "{} {} {} {}",
+                "    {} {} {} {}",
                 a.name,
                 a.ttl,
                 match a.cls {
@@ -173,6 +172,15 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
                 }
             );
         }
+        let mut flags: std::vec::Vec<String> = std::vec::Vec::new();
+        if !pkt.header.query { flags.push("QR".to_string()); }
+        if pkt.header.authoritative { flags.push("AA".to_string()); }
+        if pkt.header.truncated { flags.push("TC".to_string()); }
+        if pkt.header.recursion_desired { flags.push("RD".to_string()); }
+        if pkt.header.recursion_available { flags.push("RA".to_string()); }
+        if pkt.header.authenticated_data { flags.push("AD".to_string()); }
+        if pkt.header.checking_disabled { flags.push("CD".to_string()); }
+        println!("flags: {}", flags.join(" "));
     }
 
     Ok((time_now.elapsed().subsec_micros(), recv_len))
