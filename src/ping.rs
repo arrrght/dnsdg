@@ -5,6 +5,7 @@ use clap::{value_t, ArgMatches};
 use dns_parser::{Builder, Packet, ResponseCode};
 use dns_parser::{Class, QueryClass, QueryType, RData};
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+//use std::str::FromStr;
 use std::time::Instant;
 
 enum SomeError<'a> {
@@ -32,6 +33,7 @@ struct Opt<'a> {
     query_type: QueryType,
     verbose: bool,
 }
+
 fn parse_qtype(v: &str) -> QueryType {
     match v {
         "A" => QueryType::A,
@@ -58,6 +60,7 @@ pub fn dnsping(args: &ArgMatches) {
         interval: value_t!(args, "interval", u64).unwrap(),
         port: value_t!(args, "port", u32).unwrap(),
         query_type: parse_qtype(&value_t!(args, "qtype", String).unwrap()),
+        //query_type: value_t!(args, "qtype", QueryType),
         verbose: args.is_present("verbose"),
     };
 
@@ -82,13 +85,19 @@ pub fn dnsping(args: &ArgMatches) {
                 println!("Err: {:?}", e);
                 std::process::exit(1);
             }
-        }).collect();
+        })
+        .collect();
     //println!("\nresults: {:?}", results);
-    let max  = results.iter().max().unwrap().clone() as f32;
+    let max = results.iter().max().unwrap().clone() as f32;
     let min = results.iter().min().unwrap().clone() as f32;
     let sum: u32 = results.iter().sum();
     let aver: f32 = sum as f32 / results.len() as f32;
-    println!("min={} ms, max={} ms, avg={} ms", min/1000.0, max/1000.0, aver/1000.0);
+    println!(
+        "min={} ms, max={} ms, avg={} ms",
+        min / 1000.0,
+        max / 1000.0,
+        aver / 1000.0
+    );
 }
 
 fn prs2(name: &str, port: u32) -> Result<SocketAddr, SomeError> {
@@ -112,7 +121,8 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
     let sock = (match server_sa.is_ipv6() {
         true => UdpSocket::bind("[::]:0"),
         _ => UdpSocket::bind("0.0.0.0:0"),
-    }).map_err(SomeError::Io)?;
+    })
+    .map_err(SomeError::Io)?;
     sock.set_read_timeout(Some(std::time::Duration::new(2, 0)))
         .map_err(SomeError::Io)?;
     sock.connect(server_sa).map_err(SomeError::Io)?;
@@ -156,8 +166,9 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
                     RData::PTR(dns_parser::rdata::ptr::Record(d)) => format!("PTR {}", d),
                     #[cfg_attr(rustfmt, rustfmt::skip)]
                     RData::SOA(dns_parser::rdata::soa::Record {
-                        primary_ns, mailbox, serial, refresh, retry, expire, minimum_ttl }) 
-                        => format!( "SOA {} {} {} {} {} {} {}",
+                        primary_ns, mailbox, serial, refresh, retry, expire, minimum_ttl,
+                    }) => format!(
+                        "SOA {} {} {} {} {} {} {}",
                         primary_ns, mailbox, serial, refresh, retry, expire, minimum_ttl
                     ),
                     #[cfg_attr(rustfmt, rustfmt::skip)]
@@ -165,7 +176,8 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
                         => format!("SRV {} {} {} {}", priority, weight, port, target),
                     #[cfg_attr(rustfmt, rustfmt::skip)]
                     RData::TXT(ref txt) => {
-                        let s = txt.iter().map(|x| std::str::from_utf8(x).unwrap()).collect::<Vec<_>>().concat();
+                        let s = txt.iter().map(|x|
+                           std::str::from_utf8(x).unwrap()).collect::<Vec<_>>().concat();
                         format!("TXT {}", s)
                     }
                     RData::Unknown(d) => format!("Unknown {:?}", &d),
@@ -173,13 +185,27 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
             );
         }
         let mut flags: std::vec::Vec<String> = std::vec::Vec::new();
-        if !pkt.header.query { flags.push("QR".to_string()); }
-        if pkt.header.authoritative { flags.push("AA".to_string()); }
-        if pkt.header.truncated { flags.push("TC".to_string()); }
-        if pkt.header.recursion_desired { flags.push("RD".to_string()); }
-        if pkt.header.recursion_available { flags.push("RA".to_string()); }
-        if pkt.header.authenticated_data { flags.push("AD".to_string()); }
-        if pkt.header.checking_disabled { flags.push("CD".to_string()); }
+        if !pkt.header.query {
+            flags.push("QR".to_string());
+        }
+        if pkt.header.authoritative {
+            flags.push("AA".to_string());
+        }
+        if pkt.header.truncated {
+            flags.push("TC".to_string());
+        }
+        if pkt.header.recursion_desired {
+            flags.push("RD".to_string());
+        }
+        if pkt.header.recursion_available {
+            flags.push("RA".to_string());
+        }
+        if pkt.header.authenticated_data {
+            flags.push("AD".to_string());
+        }
+        if pkt.header.checking_disabled {
+            flags.push("CD".to_string());
+        }
         println!("flags: {}", flags.join(" "));
     }
 
