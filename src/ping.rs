@@ -17,9 +17,9 @@ enum SomeError<'a> {
 impl<'a> std::fmt::Debug for SomeError<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            SomeError::Io(ref err) => write!(f, "ErrIO: {}", err),
-            SomeError::DnsParser(ref err) => write!(f, "ErrDNSParser: {}", err),
-            SomeError::Other(ref err) => write!(f, "ErrOther: {}", err),
+            SomeError::Io(ref err) => write!(f, "IO: {}", err),
+            SomeError::DnsParser(ref err) => write!(f, "DNSParser: {:?}", err),
+            SomeError::Other(ref err) => write!(f, "Other: {}", err),
         }
     }
 }
@@ -82,7 +82,7 @@ pub fn dnsping(args: &ArgMatches) {
                 time
             }
             Err(e) => {
-                println!("Err: {:?}", e);
+                println!("Error: {:?}", e);
                 std::process::exit(1);
             }
         })
@@ -135,7 +135,17 @@ fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
     sock.send(&packet).map_err(SomeError::Io)?;
     let mut buf = vec![0u8; 4096];
     let recv_len = sock.recv(&mut buf).map_err(SomeError::Io)?;
-    let pkt = Packet::parse(&buf).map_err(SomeError::DnsParser)?;
+
+    //let pkt = Packet::parse(&buf).map_err(SomeError::DnsParser)?;
+    let pkt = match Packet::parse(&buf) {
+        Ok(o) => o,
+        Err(e) => match e {
+            dns_parser::Error::InvalidType(_) => {
+                return Ok((time_now.elapsed().subsec_micros(), recv_len))
+            }
+            _ => return Err(SomeError::DnsParser(e)),
+        },
+    };
 
     if pkt.header.response_code != ResponseCode::NoError
         && pkt.header.response_code != ResponseCode::NameError
