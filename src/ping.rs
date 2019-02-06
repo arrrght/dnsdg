@@ -5,7 +5,6 @@ use clap::{value_t, ArgMatches};
 use dns_parser::{Builder, Packet, ResponseCode};
 use dns_parser::{Class, QueryClass, QueryType, RData};
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
-//use std::str::FromStr;
 use std::time::Instant;
 
 enum SomeError<'a> {
@@ -32,6 +31,8 @@ struct Opt<'a> {
     port: u32,
     query_type: QueryType,
     verbose: bool,
+    ipv4: bool,
+    ipv6: bool
 }
 
 fn parse_qtype(v: &str) -> QueryType {
@@ -59,10 +60,13 @@ pub fn dnsping(args: &ArgMatches) {
         count: value_t!(args, "count", u32).unwrap(),
         interval: value_t!(args, "interval", u64).unwrap(),
         port: value_t!(args, "port", u32).unwrap(),
+        ipv4: args.is_present("ipv4"),
+        ipv6: args.is_present("ipv6"),
         query_type: parse_qtype(&value_t!(args, "qtype", String).unwrap()),
         //query_type: value_t!(args, "qtype", QueryType),
         verbose: args.is_present("verbose"),
     };
+    dbg!(prm);
 
     println!(
         "dnsdg ping server: {}, hostname: {}",
@@ -87,7 +91,7 @@ pub fn dnsping(args: &ArgMatches) {
             }
         })
         .collect();
-    //println!("\nresults: {:?}", results);
+    //dbg!(results); moved?
     let max = results.iter().max().unwrap().clone() as f32;
     let min = results.iter().min().unwrap().clone() as f32;
     let sum: u32 = results.iter().sum();
@@ -118,11 +122,25 @@ fn prs2(name: &str, port: u32) -> Result<SocketAddr, SomeError> {
 
 fn do_it(prm: Opt) -> Result<(u32, usize), SomeError> {
     let server_sa = prs2(prm.server, prm.port)?;
-    let sock = (match server_sa.is_ipv6() {
-        true => UdpSocket::bind("[::]:0"),
-        _ => UdpSocket::bind("0.0.0.0:0"),
-    })
-    .map_err(SomeError::Io)?;
+    //dbg!(server_sa); // new macro in 1.32
+    //let sock = (match server_sa.is_ipv6() {
+    //    true => UdpSocket::bind("[::]:0"),
+    //    _ => UdpSocket::bind("0.0.0.0:0"),
+    //}).map_err(SomeError::Io)?;
+    
+    let sock = (match prm.ipv4 {
+        true => UdpSocket::bind("0.0.0.0:0"),
+        _ => match prm.ipv6{
+            true => UdpSocket::bind("[::]:0"),
+            _ => match server_sa.is_ipv6() {
+                true => UdpSocket::bind("[::]:0"),
+                _ => UdpSocket::bind("0.0.0.0:0"),
+            }
+                
+        }
+    }).map_err(SomeError::Io)?;
+    //println!("sock: {:?}", sock);
+
     sock.set_read_timeout(Some(std::time::Duration::new(2, 0)))
         .map_err(SomeError::Io)?;
     sock.connect(server_sa).map_err(SomeError::Io)?;

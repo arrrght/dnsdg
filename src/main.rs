@@ -48,6 +48,18 @@ fn main() {
                         .default_value("8.8.8.8"),
                 )
                 .arg(
+                    Arg::with_name("ipv6")
+                        .help("Use IPv6 as default network protocol")
+                        .short("6")
+                        .long("ipv6")
+                )
+                .arg(
+                    Arg::with_name("ipv4")
+                        .help("Use IPv4 as default network protocol")
+                        .short("4")
+                        .long("ipv4")
+                )
+                .arg(
                     Arg::with_name("port")
                         .help("DNS server port number")
                         .short("p")
