@@ -48,6 +48,12 @@ fn main() {
                         .default_value("8.8.8.8"),
                 )
                 .arg(
+                    Arg::with_name("udp")
+                        .help("Use TCP instead of UDP")
+                        .short("T")
+                        .long("tcp")
+                )
+                .arg(
                     Arg::with_name("ipv6")
                         .help("Use IPv6 as default network protocol")
                         .short("6")
